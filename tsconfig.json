@@ -1,0 +1,53 @@
+{
+    "include": [ "src/**/*.ts" ],
+    "compilerOptions": {
+        // Type Checking
+        "strict": true,
+        "alwaysStrict": true,
+        "allowUnreachableCode": false,
+        "allowUnusedLabels": false,
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitOverride": true,
+        "noImplicitThis": true,
+        "noImplicitReturns": true,
+        "noUnusedParameters": false,
+        "strictNullChecks": true,
+        "useUnknownInCatchVariables": true, // https://www.typescriptlang.org/tsconfig#useUnknownInCatchVariables
+  
+        // Modules
+        "module": "commonjs",
+        "moduleResolution": "node",
+        "baseUrl": "./src",
+  
+        // Emit
+        "declaration": true,
+        "outDir": "./lib",
+  
+        // JS Support
+  
+        // Editor Support
+  
+        // Interop Constraints
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+  
+        // Backwards Compatibility
+  
+        // Language & Environment
+        "lib": [ "es2023" ],
+        "target": "es2022",
+  
+        // Compiler Diagnostics
+  
+        // Projects
+  
+        // Output Formatting
+  
+        // Completeness
+        "skipLibCheck": true
+  
+        // Command Line
+  
+        // Watch Options
+    }
+  }
