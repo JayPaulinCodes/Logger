@@ -1,9 +1,9 @@
 import { WriteStream, createWriteStream, mkdir, stat } from "fs";
 import { readdir, unlink } from "fs/promises";
-import { DirectoryCreationError } from "../errors/DirectoryCreationError";
-import { FormattedDate } from "../interfaces/FormattedDate";
 import { LoggerOptions } from "../interfaces/LoggerOptions";
-import { NotInitializedError } from "../errors/NotInitializedError";
+import { DirectoryCreationError } from "./errors/DirectoryCreationError";
+import { NotInitializedError } from "./errors/NotInitializedError";
+import dateFormat from "./DateFormat";
 
 export class Logger {
     private options: LoggerOptions;
@@ -17,20 +17,10 @@ export class Logger {
         this.options = {
             logsDirectory: "./logs/",
             useZuluTime: false,
-            logFileNameFormat: "YY-MM-DDTHH-mm-SS",
-            logPrefixFormat: "[YY-MM-DD HH:mm:SS.ss ZZ] ",
+            logFileNameFormat: "yyyy-mm-dd'T'hh-MM-ss",
+            logPrefixFormat: "[yyyy-mm-dd hh:MM:ss.l Z] ",
             onlyLogToFile: false,
-            ...options,
-            dateFormatting: {
-                year: "YYYY",
-                month: "MM",
-                day: "DD",
-                hours: "HH",
-                minutes: "MM",
-                seconds: "SS",
-                milliseconds: "SSS",
-                ...options?.dateFormatting
-            }
+            ...options
         }
         this.init().catch(err => {
             console.log(err as Error)
@@ -75,90 +65,12 @@ export class Logger {
         }
     }
 
-    private static offsetMinutesToString(minutes: number): string {
-        // Because the timezone offset function on the Date object
-        // will return a negative number if we are ahead of UTC
-        // we need to consider what the output really should be,
-        // so we always will want to multiply our input by -1
-        minutes = minutes * -1;
-
-        if (minutes === 0) return "UTC";
-        const isNegative = minutes < 0;
-        minutes = isNegative ? minutes * -1 : minutes;
-        let offsetHours = 0;
-
-        while (minutes >= 60) {
-            minutes -= 60;
-            offsetHours++;
-        }
-        
-        return "UTC" 
-            + (isNegative ? "-" : "+") 
-            + offsetHours.toString().padStart(2, "0")
-            + ":"
-            + minutes.toString().padStart(2, "0");
-    }
-
-    private getFormattedDate(date: Date = new Date()): FormattedDate {
-        let year = (this.options.useZuluTime ? date.getUTCFullYear() : date.getFullYear()).toString();
-        let month = ((this.options.useZuluTime ? date.getUTCMonth() : date.getMonth()) + 1).toString();
-        let day = (this.options.useZuluTime ? date.getUTCDay() : date.getDay()).toString();
-        let hours = (this.options.useZuluTime ? date.getUTCHours() : date.getHours()).toString();
-        let minutes = (this.options.useZuluTime ? date.getUTCMinutes() : date.getMinutes()).toString();
-        let seconds = (this.options.useZuluTime ? date.getUTCSeconds() : date.getSeconds()).toString();
-        let milliseconds = (this.options.useZuluTime ? date.getUTCMilliseconds() : date.getMilliseconds()).toString();
-        let timezone = Logger.offsetMinutesToString(this.options.useZuluTime ? 0 : date.getTimezoneOffset());
-
-        if (this.options.dateFormatting.year === "YY") year = year.slice(2);
-        if (this.options.dateFormatting.month === "MM") month = month.padStart(2, "0");
-        if (this.options.dateFormatting.day === "DD") day = day.padStart(2, "0");
-        if (this.options.dateFormatting.hours === "HH") hours = hours.padStart(2, "0");
-        if (this.options.dateFormatting.minutes === "MM") minutes = minutes.padStart(2, "0");
-        if (this.options.dateFormatting.seconds === "SS") seconds = seconds.padStart(2, "0");
-        if (this.options.dateFormatting.milliseconds === "SS") milliseconds = milliseconds.slice(0, 2);
-        if (this.options.dateFormatting.milliseconds === "S") milliseconds = milliseconds.slice(0, 1);
-
-        return {
-            year,
-            month,
-            day,
-            hours,
-            minutes,
-            seconds,
-            milliseconds,
-            timezone
-        }
-    }
-
-    /**
-     * YY = year
-     * MM = month
-     * DD = day
-     * HH = hour
-     * mm = minute
-     * SS = second
-     * ss = millisecond
-     * ZZ = timezone
-     */
-    private formattedDateToString(format: string, date: FormattedDate = this.getFormattedDate()): string {
-        format = format.replace("YY", date.year);
-        format = format.replace("MM", date.month);
-        format = format.replace("DD", date.day);
-        format = format.replace("HH", date.hours);
-        format = format.replace("mm", date.minutes);
-        format = format.replace("SS", date.seconds);
-        format = format.replace("ss", date.milliseconds);
-        format = format.replace("ZZ", date.timezone);
-
-        return format;
-    }
-
     private fileNameFromDate(date: Date = new Date()): string {
-        return this.formattedDateToString(this.options.logFileNameFormat+".log", this.getFormattedDate(date));
+        return dateFormat(date, this.options.logFileNameFormat+"'.log'", this.options.useZuluTime);
     }
 
     private logPrefixFromDate(date: Date = new Date()): string {
-        return this.formattedDateToString(this.options.logPrefixFormat, this.getFormattedDate(date));
+        return dateFormat(date, this.options.logPrefixFormat, this.options.useZuluTime);
     }
 
     private formatMessage(message: string): string {
@@ -197,10 +109,10 @@ export class Logger {
                 newWriteStream.on("open", async () => {
                     try {
                         this.writeStream = newWriteStream;
-                        this.writeStream.write(`--- Log file created at ${this.formattedDateToString("YY-MM-DD HH:mm:SS ZZ")} ---\n`);
+                        this.writeStream.write(`--- Log file created at ${dateFormat(new Date(), "yyyy-mm-dd hh:MM:ss.l Z")} ---\n`);
 
                         if (oldWriteStream !== null) {
-                            oldWriteStream.write(`--- Log file closed as of ${this.formattedDateToString("YY-MM-DD HH:mm:SS ZZ")} ---`);
+                            oldWriteStream.write(`--- Log file closed as of ${dateFormat(new Date(), "yyyy-mm-dd hh:MM:ss.l Z")} ---`);
                             await this.closeWriteStreamAsync(oldWriteStream);
                         }
 

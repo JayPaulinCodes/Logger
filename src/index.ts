@@ -1,11 +1,12 @@
-export * from "./classes/Logger";
+import { Logger } from "./classes/Logger";
 
-export * from "./interfaces/DateFormatOptions";
-export * from "./interfaces/FormattedDate";
-export * from "./interfaces/LoggerOptions";
-
-export * from "./errors/DirectoryCreationError";
-export * from "./errors/ILoggerError";
-export * from "./errors/InitializationError";
-export * from "./errors/LoggerError";
-export * from "./errors/NotInitializedError";
+(async () => {
+    const LOGGER = new Logger({
+        logPrefixFormat: "[hh:MM:ss.l Z] "
+    });
+    await LOGGER.awaitInit();
+    LOGGER.debug("test");
+    LOGGER.log("test");
+    LOGGER.warn("test");
+    LOGGER.error("test");
+})()
