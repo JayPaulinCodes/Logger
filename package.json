@@ -9,8 +9,10 @@
   "scripts": {
     "build": "tsc -b"
   },
+  "dependencies": {
+    "@types/node": "^20.11.20"
+  },
   "devDependencies": {
-    "@types/node": "^20.11.20",
     "typescript": "^5.3.3"
   },
   "engines": {

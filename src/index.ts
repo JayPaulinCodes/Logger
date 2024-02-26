@@ -1,12 +1,9 @@
-import { Logger } from "./classes/Logger";
+export * from "./classes/errors/DirectoryCreationError";
+export * from "./classes/errors/InitializationError";
+export * from "./classes/errors/LoggerError";
+export * from "./classes/errors/NotInitializedError";
+export * from "./classes/errors/UnknwonError";
 
-(async () => {
-    const LOGGER = new Logger({
-        logPrefixFormat: "[hh:MM:ss.l Z] "
-    });
-    await LOGGER.awaitInit();
-    LOGGER.debug("test");
-    LOGGER.log("test");
-    LOGGER.warn("test");
-    LOGGER.error("test");
-})()
+export * from "./classes/Logger";
+
+export * from "./interfaces/LoggerOptions";
