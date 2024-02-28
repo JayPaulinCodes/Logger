@@ -10,7 +10,8 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@types/node": "^20.11.20"
+    "@types/node": "^20.11.20",
+    "fast-redact": "^3.3.0"
   },
   "devDependencies": {
     "typescript": "^5.3.3"
