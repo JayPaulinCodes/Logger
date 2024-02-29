@@ -15,7 +15,7 @@
         "useUnknownInCatchVariables": true, // https://www.typescriptlang.org/tsconfig#useUnknownInCatchVariables
   
         // Modules
-        "module": "commonjs",
+        "module": "CommonJS",
         "moduleResolution": "node",
         "baseUrl": "./src",
   

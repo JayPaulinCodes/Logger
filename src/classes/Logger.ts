@@ -1,158 +1,133 @@
-import { WriteStream, createWriteStream, mkdir, stat } from "fs";
-import { readdir, unlink } from "fs/promises";
-import { LoggerOptions } from "../interfaces/LoggerOptions";
-import { DirectoryCreationError } from "./errors/DirectoryCreationError";
-import { NotInitializedError } from "./errors/NotInitializedError";
+import { hostname } from "node:os";
+import { WriteStream, mkdirSync, statSync, createWriteStream, readdirSync, unlinkSync } from "node:fs";
 import dateFormat from "./DateFormat";
+import { OptionsBuilder } from "./OptionsBuilder";
+import { DirectoryCreationError } from "./errors/DirectoryCreationError";
+import { LogFormatting } from "../enums/LogFormatting";
+import { LogLevelValues } from "../enums/LogLevelValues";
+import { LoggerOptions } from "../interfaces/LoggerOptions";
+import { PartialLoggerOptions } from "../interfaces/partials/PartialLoggerOptions";
+import { LogLevels } from "../types/LogLevels";
 
 export class Logger {
-    private options: LoggerOptions;
+    private readonly _options: LoggerOptions;
+    private readonly outputFormatter: (data: { [index: string]: any }) => string;
     private writeStream: WriteStream | null = null;
-    private fileSwitchTimeout?: NodeJS.Timeout;
+    private tempFileBuffer: string[] = [];
     private initComplete: boolean = false;
-    private initResolve?: (value: void | PromiseLike<void>) => void;
-    private initReject?: (reason?: any) => void;
+    private fileSwitchTimeout?: NodeJS.Timeout;
 
-    constructor(options?: Partial<LoggerOptions>) {
-        this.options = {
-            logsDirectory: "./logs/",
-            useZuluTime: false,
-            logFileNameFormat: "yyyy-mm-dd'T'hh-MM-ss",
-            logPrefixFormat: "[yyyy-mm-dd hh:MM:ss.l Z] ",
-            onlyLogToFile: false,
-            ...options
-        }
-        this.init().catch(err => {
-            console.log(err as Error)
-        });
+    constructor(options: PartialLoggerOptions = {}) {
+        // Build the provided options into a complete set of options
+        this._options = OptionsBuilder.build(options);
+
+        // Get the output formatter function from the options
+        this.outputFormatter = typeof this.options.output.formatting === "string" 
+            ? LogFormatting[this.options.output.formatting].bind(this) : this.options.output.formatting.bind(this);
+
+        // Run out init function
+        this.init();
     }
 
-    public get logDirectory(): string {
-        return this.options.logsDirectory;
+    public get options(): LoggerOptions {
+        return this._options;
     }
 
-    public get currentLogFilePath(): string | Buffer | undefined {
-        return this.writeStream?.path;
+    public get stream(): WriteStream | null {
+        return this.writeStream;
     }
 
-    public async awaitInit(): Promise<void> {
-        return new Promise<void>((resolve, reject) => {
-            if (this.initComplete) {
-                resolve();
-                return;
-            }
-
-            this.initResolve = resolve;
-            this.initReject = reject;
-        });
+    public get ready(): boolean {
+        return this.initComplete;
     }
 
-    private async init(): Promise<void> {
+    private init(): void {
+        // Make sure we haven't already ran the init function
         if (this.initComplete) return;
 
-        try {
-            await this.setUpLogFileAsync();
+        // Create the log file and schedule it's swap if needed
+        if (this.options.output.file.enabled) {
+            this.setUpLogFile();
             this.scheduleLogFileSwitch();
+        }
 
-            if (this.initResolve !== undefined) this.initResolve();
-            
-            this.initComplete = true;
-            this.initResolve = undefined;
-            this.initReject = undefined;
+        this.initComplete = true;
+    }
+
+    private getFileNameFromDate(date: Date = new Date()): string {
+        return dateFormat(date, this.options.output.file.outputFileName, this.options.output.useZuluTime);
+    }
+
+    private createDirIfNeeded(path: string) {
+        // Check if the path exists and is a directory
+        // Because statSync will throw an error if the file / dir
+        // doesn't exist we expect an error to be thrown before we get 
+        // to the return line, so we are sure to catch and and verify that we are 
+        // getting the error we need. This is basically a overcomplicated if statement
+        try {
+            statSync(path);
+            return;
         } catch (err) {
-            console.log(err as Error);
-            if (this.initReject !== undefined) this.initReject(err);
+            const error = err as NodeJS.ErrnoException;
+            if (error.code !== "ENOENT") throw error;
+        }
+
+        // Make a directory at the path
+        try {
+            mkdirSync(path, { recursive: true });
+        } catch (err) {
+            throw new DirectoryCreationError(path, (err as Error));
         }
     }
 
-    private fileNameFromDate(date: Date = new Date()): string {
-        return dateFormat(date, this.options.logFileNameFormat+"'.log'", this.options.useZuluTime);
-    }
+    private setUpLogFile() {
+        // Setup the new file
+        this.createDirIfNeeded(this.options.output.file.outputDirectory);
+        const fileName = this.getFileNameFromDate();
+        const filePath = this.options.output.file.outputDirectory + fileName;
+        const oldStream = this.writeStream;
+        const newStream = createWriteStream(filePath, { flags: "wx", encoding: "utf8" });
 
-    private logPrefixFromDate(date: Date = new Date()): string {
-        return dateFormat(date, this.options.logPrefixFormat, this.options.useZuluTime);
-    }
+        // Wait for the new file to open
+        newStream.on("open", () => {
+            // Write the stream opening line before setting the property to ensure it's always first
+            newStream.write(`--- Log file created at ${dateFormat(new Date(), "yyyy-mm-dd HH:MM:ss.l Z", this.options.output.useZuluTime)} ---\n`);
+                    
+            // Write the temp storage to the stream
+            if (this.tempFileBuffer.length > 0) this.tempFileBuffer.forEach(elem => newStream.write(elem));
+            this.tempFileBuffer = [];
 
-    private formatMessage(message: string): string {
-        return this.logPrefixFromDate()+message;
-    }
+            // Assign the stream property
+            this.writeStream = newStream;
 
-    private createDirIfNeededAsync(path: string) {
-        return new Promise<void>((resolve, reject) => {
-            stat(path, (_, stats) => {
-                if (stats === undefined) {
-                    mkdir(path, { recursive: true }, errMkdir => {
-                        if (errMkdir) {
-                            reject(new DirectoryCreationError(path, errMkdir));
-                            return;
-                        }
-
-                        resolve();
-                        return;
-                    });
-                }
-                
-                resolve();
-            });
-        });
-    }
-
-    private setUpLogFileAsync(): Promise<void> {
-        return new Promise<void>(async (resolve, reject) => {
-            try {
-                await this.createDirIfNeededAsync(this.options.logsDirectory);
-                const fileName = this.fileNameFromDate();
-                const filePath = this.options.logsDirectory + fileName;
-                const oldWriteStream = this.writeStream;
-                const newWriteStream = createWriteStream(filePath, { flags: "wx", encoding: "utf8" });
-
-                newWriteStream.on("open", async () => {
-                    try {
-                        this.writeStream = newWriteStream;
-                        this.writeStream.write(`--- Log file created at ${dateFormat(new Date(), "yyyy-mm-dd hh:MM:ss.l Z")} ---\n`);
-
-                        if (oldWriteStream !== null) {
-                            oldWriteStream.write(`--- Log file closed as of ${dateFormat(new Date(), "yyyy-mm-dd hh:MM:ss.l Z")} ---`);
-                            await this.closeWriteStreamAsync(oldWriteStream);
-                        }
-
-                        resolve();
-                    } catch (err) {
-                        reject(err);
-                    }
-                });
-
-                newWriteStream.on("error", err => {
-                    reject(err);
-                });
-            } catch (err) {
-                if (err instanceof DirectoryCreationError) {
-                    reject(err);
-                    return;
-                }
-                reject(err);
+            // Close out the old file
+            if (oldStream !== null) {
+                oldStream.write(`--- Log file closed as of ${dateFormat(new Date(), "yyyy-mm-dd HH:MM:ss.l Z", this.options.output.useZuluTime)} ---`);
+                oldStream.end();
             }
         });
-    }
-
-    private closeWriteStreamAsync(stream: WriteStream): Promise<void> {
-        return new Promise<void>(resolve => stream.end(resolve));
-    }
-
-    private async purgeOldFiles(oldestFileAgeMs: number = 2592000000): Promise<void> {
-        await Promise.all((await readdir(this.options.logsDirectory)).map(async file => {
-            const fileDateTime = file.slice(0, file.length - 4);
-            const fileAgeMs = new Date(fileDateTime.replace(/([0-9]{2})-([0-9]{2})-([0-9]{2})$/, "$1:$2:$3")).getTime();
         
-            if (fileAgeMs + oldestFileAgeMs <= Date.now()) {
-                try {
-                    const filePath = this.options.logsDirectory + file;
-                    await unlink(filePath);
-                } catch (err) {
-                    console.log(err as Error);
-                }
+        newStream.once("close", () => {
+            this.writeStream = null;
+        });
+
+        return;
+    }
+
+    private purgeOldFiles(oldestFileAgeMs: number = 2592000000): void {
+        // We can only purge the files if we are using default file name format
+        if (!this.options.output.file.enabled || this.options.output.file.outputFileName !== "yyyy-mm-dd'T'HH-MM-ss'.log'") return;
+        
+        // Get all the files in the directory
+        const files = readdirSync(this.options.output.file.outputDirectory);
+        
+        // Check each file to see if we need to purge it
+        files.forEach(file => {
+            const fileStat = statSync(this.options.output.file.outputDirectory + file);
+            if (fileStat.birthtimeMs + oldestFileAgeMs <= Date.now()) {
+                unlinkSync(this.options.output.file.outputDirectory + file);
             }
-        }));
+        });
     }
 
     private scheduleLogFileSwitch(): void {
@@ -161,7 +136,7 @@ export class Logger {
         const MS_DELAY = MS_24_HRS - (Date.now() % MS_24_HRS);
         this.fileSwitchTimeout = setTimeout(() => {
             try {
-                this.setUpLogFileAsync();
+                this.setUpLogFile();
             } catch (err) {
                 if (err instanceof Error) console.log(`Failed to create new log file:\n${err.stack}`);
             }
@@ -170,29 +145,56 @@ export class Logger {
             this.purgeOldFiles();
         }, MS_DELAY);
     }
+    
+    private print(level: LogLevels, message?: string, error?: Error): void {
+        // If we have disabled bot console and file logging stop
+        if (!this.options.output.console.enabled && this.options.output.file.enabled) return;
 
-    private print(message: string) {
-        if (!this.initComplete) throw new NotInitializedError();
+        // Make sure we are logging this level
+        if (LogLevelValues[level] < LogLevelValues[this.options.logLevel]) return;
 
-        message = this.formatMessage(message);
+        // Build the data object to pass to the formatter
+        const data: { [index: string]: any } = {};
+        data["level"] = level;
+        data["pid"] = process.pid;
+        data["hostname"] = hostname();
+        if (this.options.timestamp) data["time"] = Date.now();
+        if (message !== undefined) data["msg"] = message;
+        if (error !== undefined) data["err"] = error;
 
-        if (!this.options.onlyLogToFile) console.log(message);
-        if (this.writeStream !== null) this.writeStream.write(message + "\n");
+        // Run the data through the output formatter
+        const formattedMessage = this.outputFormatter(data);
+
+        // Write to console
+        if (this.options.output.console.enabled) console.log(formattedMessage);
+
+        // Write to file
+        if (this.options.output.file.enabled) {
+            if (this.stream === null) {
+                this.tempFileBuffer?.push(formattedMessage+"\n")
+            } else {
+                this.stream.write(formattedMessage+"\n");
+            }
+        } 
     }
 
     public debug(message: string): void {
-        this.print(`DEBUG: ${message}`);
+        this.print("debug", message);
     }
 
     public log(message: string): void {
-        this.print(`LOG: ${message}`);
+        this.print("info", message);
     }
 
-    public warn(message: string): void {
-        this.print(`WARN: ${message}`);
+    public warn(message?: string, error?: Error): void {
+        this.print("warn", message, error);
     }
 
-    public error(message: string): void {
-        this.print(`ERROR: ${message}`);
+    public error(message?: string, error?: Error): void {
+        this.print("error", message, error);
+    }
+
+    public fatal(message?: string, error?: Error): void {
+        this.print("fatal", message, error);
     }
 }

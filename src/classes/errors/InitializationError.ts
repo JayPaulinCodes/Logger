@@ -1,4 +1,4 @@
-import { format } from "util";
+import { format } from "node:util";
 import { LoggerError } from "./LoggerError";
 
 export abstract class InitializationError extends LoggerError {

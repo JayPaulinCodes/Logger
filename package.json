@@ -1,22 +1,28 @@
 {
   "name": "@devjacob/logger",
   "version": "1.0.0",
-  "description": "",
-  "author": "",
-  "license": "ISC",
+  "description": "A simple logger package",
+  "author": "Jacob Paulin",
+  "license": "MPL-2.0",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JayPaulinCodes/logger.git"
+  },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "prepublish:npm": "npm run build",
+    "publish:npm": "npm publish --access=public"
   },
   "dependencies": {
-    "@types/node": "^20.11.20",
-    "fast-redact": "^3.3.0"
+    "@devjacob/smush": "^1.0.6"
   },
   "devDependencies": {
+    "@types/node": "^20.11.22",
     "typescript": "^5.3.3"
   },
   "engines": {
-    "node": "20.x.x"
+    "node": ">=16.x.x"
   }
 }

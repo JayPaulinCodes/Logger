@@ -1,8 +1,8 @@
-import { Logger } from "../classes/Logger";
-import { ConsoleOutputOptions } from "./ConsoleOutputOptions";
-import { FileOutputOptions } from "./FileOutputOptions";
+import { Logger } from "../../classes/Logger";
+import { PartialConsoleOutputOptions } from "./PartialConsoleOutputOptions";
+import { PartialFileOutputOptions } from "./PartialFileOutputOptions";
 
-export interface OutputOptions {
+export interface PartialOutputOptions {
     /**
      * The function to format the log output.
      *  When providing a string you must specify one of the predefined formats:
@@ -12,21 +12,21 @@ export interface OutputOptions {
      * 
      * Default: 'standard'
      */
-    formatting: string | ((this: Logger, data: { [index: string]: any }) => string);
+    formatting?: string | ((this: Logger, data: { [index: string]: any }) => string)
 
     /**
      * Controls if the time used in logs is zulu time or local time
      * Default: true
      */
-    useZuluTime: boolean;
+    useZuluTime?: boolean
 
     /**
      * The options for the outputing to the console
      */
-    console: ConsoleOutputOptions;
+    console?: PartialConsoleOutputOptions
 
     /**
      * The options for the outputing to a file
      */
-    file: FileOutputOptions;
+    file?: PartialFileOutputOptions
 }
