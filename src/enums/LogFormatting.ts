@@ -19,19 +19,25 @@ export const LogFormatting: { [index: string]: (this: Logger, data: { [index: st
 
         const unfilledString = data.err === undefined 
             ? this.options.timestamp 
-                ? "'['HH:MM:ss.l Z'] %s: %s'"
+                ? "%s %s: %s"
                 : "%s: %s"
             : this.options.timestamp 
-                ? "'['HH:MM:ss.l Z'] %s: %s\n%s'"
+                ? "%s %s: %s\n%s"
                 : "%s: %s\n%s";
 
-        const filledString = data.err === undefined 
-            ? format(unfilledString, level, msg)
-            : format(unfilledString, level, msg, stack);
+        const timestamp = this.options.timestamp 
+            ? dateFormat(data.time, "'['HH:MM:ss.l Z']'", this.options.output.useZuluTime) 
+            : null;
 
-        return this.options.timestamp 
-            ? dateFormat(data.time, filledString, this.options.output.useZuluTime)
-            : filledString;
+        const formatParams = data.err === undefined 
+            ? this.options.timestamp
+                ? [ timestamp, level, msg ]
+                : [ level, msg ]
+            : this.options.timestamp
+            ? [ timestamp, level, msg, stack ]
+            : [ level, msg, stack ];
+
+        return format(unfilledString, ...formatParams);
     },
     ["standard-full-date"]: function(this: Logger, data: { [index: string]: any }): string {
         const level = String(data.level).toUpperCase();
@@ -46,18 +52,24 @@ export const LogFormatting: { [index: string]: (this: Logger, data: { [index: st
 
         const unfilledString = data.err === undefined 
             ? this.options.timestamp 
-                ? "'['yyyy-mm-dd HH:MM:ss.l Z'] %s: %s'"
+                ? "%s %s: %s"
                 : "%s: %s"
             : this.options.timestamp 
-                ? "'['yyyy-mm-dd HH:MM:ss.l Z'] %s: %s\n%s'"
+                ? "%s %s: %s\n%s"
                 : "%s: %s\n%s";
 
-        const filledString = data.err === undefined 
-            ? format(unfilledString, level, msg)
-            : format(unfilledString, level, msg, stack);
+        const timestamp = this.options.timestamp 
+            ? dateFormat(data.time, "'['yyyy-mm-dd HH:MM:ss.l Z']'", this.options.output.useZuluTime) 
+            : null;
 
-        return this.options.timestamp 
-            ? dateFormat(data.time, filledString, this.options.output.useZuluTime)
-            : filledString;
+        const formatParams = data.err === undefined 
+            ? this.options.timestamp
+                ? [ timestamp, level, msg ]
+                : [ level, msg ]
+            : this.options.timestamp
+            ? [ timestamp, level, msg, stack ]
+            : [ level, msg, stack ];
+
+        return format(unfilledString, ...formatParams);
     }
 } as const;
