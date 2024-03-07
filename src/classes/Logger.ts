@@ -87,6 +87,7 @@ export class Logger {
         const filePath = this.options.output.file.outputDirectory + fileName;
         const oldStream = this.writeStream;
         const newStream = createWriteStream(filePath, { flags: "wx", encoding: "utf8" });
+        this.writeStream = null;
 
         // Wait for the new file to open
         newStream.on("open", () => {
@@ -105,10 +106,6 @@ export class Logger {
                 oldStream.write(`--- Log file closed as of ${dateFormat(new Date(), "yyyy-mm-dd HH:MM:ss.l Z", this.options.output.useZuluTime)} ---`);
                 oldStream.end();
             }
-        });
-        
-        newStream.once("close", () => {
-            this.writeStream = null;
         });
 
         return;
@@ -133,7 +130,8 @@ export class Logger {
     private scheduleLogFileSwitch(): void {
         // Previously was: 86400000 - (((Date.now() + 5000) % 86400000) - 5000)
         const MS_24_HRS = 24 * 60 * 60 * 1000; // 86400000
-        const MS_DELAY = MS_24_HRS - (Date.now() % MS_24_HRS);
+        const DATE = Date.now() + (new Date().getTimezoneOffset() * (this.options.output.useZuluTime ? 0 : -60000));
+        const MS_DELAY = MS_24_HRS - (DATE % MS_24_HRS);
         this.fileSwitchTimeout = setTimeout(() => {
             try {
                 this.setUpLogFile();
