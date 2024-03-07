@@ -87,6 +87,7 @@ export class Logger {
         const filePath = this.options.output.file.outputDirectory + fileName;
         const oldStream = this.writeStream;
         const newStream = createWriteStream(filePath, { flags: "wx", encoding: "utf8" });
+        this.writeStream = null;
 
         // Wait for the new file to open
         newStream.on("open", () => {
@@ -105,10 +106,6 @@ export class Logger {
                 oldStream.write(`--- Log file closed as of ${dateFormat(new Date(), "yyyy-mm-dd HH:MM:ss.l Z", this.options.output.useZuluTime)} ---`);
                 oldStream.end();
             }
-        });
-        
-        newStream.once("close", () => {
-            this.writeStream = null;
         });
 
         return;
