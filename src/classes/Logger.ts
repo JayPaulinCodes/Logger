@@ -133,7 +133,8 @@ export class Logger {
     private scheduleLogFileSwitch(): void {
         // Previously was: 86400000 - (((Date.now() + 5000) % 86400000) - 5000)
         const MS_24_HRS = 24 * 60 * 60 * 1000; // 86400000
-        const MS_DELAY = MS_24_HRS - (Date.now() % MS_24_HRS);
+        const DATE = Date.now() + (new Date().getTimezoneOffset() * (this.options.output.useZuluTime ? 0 : -60000));
+        const MS_DELAY = MS_24_HRS - (DATE % MS_24_HRS);
         this.fileSwitchTimeout = setTimeout(() => {
             try {
                 this.setUpLogFile();
