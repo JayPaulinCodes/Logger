@@ -7,14 +7,14 @@ export interface FileOutputOptions {
 
     /**
      * The directory to create the log files in
-     * Default: './logs/'
+     * Default: '.\\logs\\'
      */
     outputDirectory: string;
 
     /**
      * The format for the name of the log files
      * Supports DateFormat variables
-     * Default: 'yyyy-mm-dd'T'hh-MM-ss.log'
+     * Default: 'yyyy-mm-dd'T'hh-MM-ss'
      */
     outputFileName: string;
 }

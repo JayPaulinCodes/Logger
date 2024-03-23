@@ -1,5 +1,5 @@
 import { hostname } from "node:os";
-import { WriteStream, mkdirSync, statSync, createWriteStream, readdirSync, unlinkSync } from "node:fs";
+import { WriteStream, mkdirSync, statSync, createWriteStream, readdirSync, unlinkSync, existsSync } from "node:fs";
 import dateFormat from "./DateFormat";
 import { OptionsBuilder } from "./OptionsBuilder";
 import { DirectoryCreationError } from "./errors/DirectoryCreationError";
@@ -8,6 +8,8 @@ import { LogLevelValues } from "../enums/LogLevelValues";
 import { LoggerOptions } from "../interfaces/LoggerOptions";
 import { PartialLoggerOptions } from "../interfaces/partials/PartialLoggerOptions";
 import { LogLevels } from "../types/LogLevels";
+import { format } from "node:util";
+import path from "node:path";
 
 export class Logger {
     private readonly _options: LoggerOptions;
@@ -15,6 +17,8 @@ export class Logger {
     private writeStream: WriteStream | null = null;
     private tempFileBuffer: string[] = [];
     private initComplete: boolean = false;
+    private closing: boolean = false;
+    private opening: boolean = false;
     private fileSwitchTimeout?: NodeJS.Timeout;
 
     constructor(options: PartialLoggerOptions = {}) {
@@ -26,7 +30,8 @@ export class Logger {
             ? LogFormatting[this.options.output.formatting].bind(this) : this.options.output.formatting.bind(this);
 
         // Run out init function
-        this.init();
+        const [ openSucceeded, msg ] = this.open();
+        if (!openSucceeded) throw new Error(`Init Error: ${msg}`);
     }
 
     public get options(): LoggerOptions {
@@ -43,7 +48,8 @@ export class Logger {
 
     private init(): void {
         // Make sure we haven't already ran the init function
-        if (this.initComplete) return;
+        if (this.initComplete || this.opening) return;
+        this.opening = true;
 
         // Create the log file and schedule it's swap if needed
         if (this.options.output.file.enabled) {
@@ -82,9 +88,16 @@ export class Logger {
 
     private setUpLogFile() {
         // Setup the new file
-        this.createDirIfNeeded(this.options.output.file.outputDirectory);
-        const fileName = this.getFileNameFromDate();
-        const filePath = this.options.output.file.outputDirectory + fileName;
+        const trueFileDir = path.normalize(this.options.output.file.outputDirectory);
+        this.createDirIfNeeded(trueFileDir);
+        let fileName: string;
+        let filePath: string;
+        let iterations = 0;
+        do {
+            fileName = iterations > 0 ? format("%s (%s).log", this.getFileNameFromDate(), iterations) : format("%s.log", this.getFileNameFromDate());
+            filePath = trueFileDir + fileName;
+            iterations++;
+        } while (existsSync(format("%s\\%s", process.cwd(), filePath)));
         const oldStream = this.writeStream;
         const newStream = createWriteStream(filePath, { flags: "wx", encoding: "utf8" });
         this.writeStream = null;
@@ -106,6 +119,8 @@ export class Logger {
                 oldStream.write(`--- Log file closed as of ${dateFormat(new Date(), "yyyy-mm-dd HH:MM:ss.l Z", this.options.output.useZuluTime)} ---`);
                 oldStream.end();
             }
+
+            this.opening = false;
         });
 
         return;
@@ -145,6 +160,9 @@ export class Logger {
     }
     
     private print(level: LogLevels, message?: string, error?: Error): void {
+        // If we are in the process of closing or opening the file & logger don't log
+        if (this.closing || this.opening) return;
+
         // If we have disabled bot console and file logging stop
         if (!this.options.output.console.enabled && this.options.output.file.enabled) return;
 
@@ -174,6 +192,41 @@ export class Logger {
                 this.stream.write(formattedMessage+"\n");
             }
         } 
+    }
+
+    public close(): [boolean, string | null] {
+        if (this.opening) return [ false, "Cannot close while opening" ];
+        if (this.closing) return [ false, "Cannot close while already closing" ];
+        if (!this.initComplete) return [ false, "Cannot close already closed logger" ];
+
+        this.closing = true;
+        clearTimeout(this.fileSwitchTimeout);
+
+        const oldStream = this.writeStream;
+        const oldBuffer = this.tempFileBuffer;
+        this.writeStream = null;
+        this.tempFileBuffer = [];
+
+        if (oldStream !== null) {    
+            // Write the temp storage to the stream
+            if (oldBuffer.length > 0) oldBuffer.forEach(elem => oldStream.write(elem));
+
+            oldStream.write(`--- Log file closed as of ${dateFormat(new Date(), "yyyy-mm-dd HH:MM:ss.l Z", this.options.output.useZuluTime)} ---`);
+            oldStream.end();
+        }
+
+        this.initComplete = false;
+        this.closing = false;
+        
+        return [ true, null ];
+    }
+
+    public open(): [boolean, string | null] {
+        if (this.closing) return [ false, "Cannot open while closing" ];
+        if (this.opening) return [ false, "Cannot open while already opening" ];
+        
+        this.init();
+        return [ true, null ];
     }
 
     public debug(message: string): void {

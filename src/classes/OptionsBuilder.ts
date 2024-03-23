@@ -16,8 +16,8 @@ export class OptionsBuilder {
             },
             file: {
                 enabled: false,
-                outputDirectory: "./logs/",
-                outputFileName: "yyyy-mm-dd'T'HH-MM-ss'.log'"
+                outputDirectory: ".\\logs\\",
+                outputFileName: "yyyy-mm-dd'T'HH-MM-ss"
             }
         }
     }
