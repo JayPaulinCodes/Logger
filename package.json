@@ -1,6 +1,6 @@
 {
   "name": "@devjacob/logger",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A simple logger package",
   "author": "Jacob Paulin",
   "license": "MPL-2.0",
