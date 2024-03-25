@@ -4,7 +4,7 @@ import { LoggerOptions } from "../interfaces/LoggerOptions";
 import { PartialLoggerOptions } from "../interfaces/partials/PartialLoggerOptions";
 
 export class OptionsBuilder {
-    private static readonly DEFAULT_OPTIONS: LoggerOptions = {
+    public static readonly DEFAULT_OPTIONS: LoggerOptions = {
         name: undefined,
         logLevel: "info",
         timestamp: true,
@@ -17,7 +17,8 @@ export class OptionsBuilder {
             file: {
                 enabled: false,
                 outputDirectory: ".\\logs\\",
-                outputFileName: "yyyy-mm-dd'T'HH-MM-ss"
+                outputFileName: "yyyy-mm-dd'T'HH-MM-ss",
+                maxFileAge: -1
             }
         }
     }
