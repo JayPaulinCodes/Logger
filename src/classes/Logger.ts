@@ -109,6 +109,7 @@ export class Logger {
                     
             // Write the temp storage to the stream
             if (this.tempFileBuffer.length > 0) this.tempFileBuffer.forEach(elem => newStream.write(elem));
+            this.opening = false;
             this.tempFileBuffer = [];
 
             // Assign the stream property
@@ -119,25 +120,26 @@ export class Logger {
                 oldStream.write(`--- Log file closed as of ${dateFormat(new Date(), "yyyy-mm-dd HH:MM:ss.l Z", this.options.output.useZuluTime)} ---`);
                 oldStream.end();
             }
-
-            this.opening = false;
         });
 
         return;
     }
 
-    private purgeOldFiles(oldestFileAgeMs: number = 2592000000): void {
-        // We can only purge the files if we are using default file name format
-        if (!this.options.output.file.enabled || this.options.output.file.outputFileName !== "yyyy-mm-dd'T'HH-MM-ss'.log'") return;
-        
+    private purgeOldFiles(): void {
+        // Check if we have disabled the feature
+        const maxAgeMs = this.options.output.file.maxFileAge;
+        if (!this.options.output.file.enabled || maxAgeMs <= 0) return;
+
+        const trueFileDir = path.normalize(this.options.output.file.outputDirectory);
+
         // Get all the files in the directory
-        const files = readdirSync(this.options.output.file.outputDirectory);
+        const files = readdirSync(trueFileDir);
         
         // Check each file to see if we need to purge it
         files.forEach(file => {
-            const fileStat = statSync(this.options.output.file.outputDirectory + file);
-            if (fileStat.birthtimeMs + oldestFileAgeMs <= Date.now()) {
-                unlinkSync(this.options.output.file.outputDirectory + file);
+            const fileStat = statSync(trueFileDir + file);
+            if (fileStat.birthtimeMs + maxAgeMs <= Date.now()) {
+                unlinkSync(trueFileDir + file);
             }
         });
     }
@@ -157,41 +159,6 @@ export class Logger {
             this.scheduleLogFileSwitch();
             this.purgeOldFiles();
         }, MS_DELAY);
-    }
-    
-    private print(level: LogLevels, message?: string, error?: Error): void {
-        // If we are in the process of closing or opening the file & logger don't log
-        if (this.closing || this.opening) return;
-
-        // If we have disabled bot console and file logging stop
-        if (!this.options.output.console.enabled && this.options.output.file.enabled) return;
-
-        // Make sure we are logging this level
-        if (LogLevelValues[level] < LogLevelValues[this.options.logLevel]) return;
-
-        // Build the data object to pass to the formatter
-        const data: { [index: string]: any } = {};
-        data["level"] = level;
-        data["pid"] = process.pid;
-        data["hostname"] = hostname();
-        if (this.options.timestamp) data["time"] = Date.now();
-        if (message !== undefined) data["msg"] = message;
-        if (error !== undefined) data["err"] = error;
-
-        // Run the data through the output formatter
-        const formattedMessage = this.outputFormatter(data);
-
-        // Write to console
-        if (this.options.output.console.enabled) console.log(formattedMessage);
-
-        // Write to file
-        if (this.options.output.file.enabled) {
-            if (this.stream === null) {
-                this.tempFileBuffer?.push(formattedMessage+"\n")
-            } else {
-                this.stream.write(formattedMessage+"\n");
-            }
-        } 
     }
 
     public close(): [boolean, string | null] {
@@ -227,6 +194,41 @@ export class Logger {
         
         this.init();
         return [ true, null ];
+    }
+    
+    private print(level: LogLevels, message?: string, error?: Error): void {
+        // If we are in the process of closing the file & logger don't log
+        if (this.closing) return;
+
+        // If we have disabled bot console and file logging stop
+        if (!this.options.output.console.enabled && this.options.output.file.enabled) return;
+
+        // Make sure we are logging this level
+        if (LogLevelValues[level] < LogLevelValues[this.options.logLevel]) return;
+
+        // Build the data object to pass to the formatter
+        const data: { [index: string]: any } = {};
+        data["level"] = level;
+        data["pid"] = process.pid;
+        data["hostname"] = hostname();
+        if (this.options.timestamp) data["time"] = Date.now();
+        if (message !== undefined) data["msg"] = message;
+        if (error !== undefined) data["err"] = error;
+
+        // Run the data through the output formatter
+        const formattedMessage = this.outputFormatter(data);
+
+        // Write to console
+        if (this.options.output.console.enabled) console.log(formattedMessage);
+
+        // Write to file
+        if (this.options.output.file.enabled) {
+            if (this.stream === null) {
+                this.tempFileBuffer?.push(formattedMessage+"\n")
+            } else {
+                this.stream.write(formattedMessage+"\n");
+            }
+        } 
     }
 
     public debug(message: string): void {
